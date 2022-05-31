@@ -248,6 +248,23 @@ impl MmapInner {
             }
         }
     }
+
+    #[cfg(target_os = "linux")]
+    pub fn remap(&mut self, new_len: usize) -> io::Result<()> {
+        unsafe {
+            // TODO: More flags
+            let ptr = libc::mremap(self.ptr, self.len, new_len, libc::MREMAP_MAYMOVE);
+
+            if ptr == libc::MAP_FAILED {
+                Err(io::Error::last_os_error())
+            } else {
+                self.ptr = ptr;
+                self.len = new_len;
+
+                Ok(())
+            }
+        }
+    }
 }
 
 impl Drop for MmapInner {

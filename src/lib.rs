@@ -611,6 +611,14 @@ impl Mmap {
     pub fn advise(&self, advice: Advice) -> Result<()> {
         self.inner.advise(advice)
     }
+
+    /// Remap underlying mapping. Only supported on Linux.
+    ///
+    /// See [mremap()](https://man7.org/linux/man-pages/man2/mremap.2.html) map page.
+    #[cfg(target_os = "linux")]
+    pub fn remap(&mut self, new_size: usize) -> Result<()> {
+        self.inner.remap(new_size)
+    }
 }
 
 #[cfg(feature = "stable_deref_trait")]
@@ -986,6 +994,14 @@ impl MmapMut {
     #[cfg(unix)]
     pub fn advise(&self, advice: Advice) -> Result<()> {
         self.inner.advise(advice)
+    }
+
+    /// Remap underlying mapping. Only supported on Linux.
+    ///
+    /// See [mremap()](https://man7.org/linux/man-pages/man2/mremap.2.html) map page.
+    #[cfg(target_os = "linux")]
+    pub fn remap(&mut self, new_size: usize) -> Result<()> {
+        self.inner.remap(new_size)
     }
 }
 
@@ -1555,6 +1571,44 @@ mod test {
             .expect("mmap advising should be supported on unix");
 
         // read values back
+        assert_eq!(&incr[..], &mmap[..]);
+    }
+
+    #[test]
+    fn remap() {
+        let expected_len = 64;
+        let mut mmap = MmapMut::map_anon(expected_len).unwrap();
+        let len = mmap.len();
+        assert_eq!(expected_len, len);
+
+        let zeros = vec![0; len];
+        let incr: Vec<u8> = (0..len as u8).collect();
+
+        // check that the mmap is empty
+        assert_eq!(&zeros[..], &mmap[..]);
+
+        // write values into the mmap
+        (&mut mmap[..]).write_all(&incr[..]).unwrap();
+
+        // read values back
+        assert_eq!(&incr[..], &mmap[..]);
+
+        let new_len = expected_len * 2;
+        mmap.remap(new_len);
+        let len = mmap.len();
+        assert_eq!(new_len, len);
+
+        let incr: Vec<u8> = (0..len as u8).collect();
+
+        // check that the mmap has original contents
+        assert_eq!(&incr[..expected_len-1], &mmap[..expected_len-1]);
+
+        // write values into the mmap
+        (&mut mmap[expected_len..])
+            .write_all(&incr[expected_len..])
+            .unwrap();
+
+        // read values back, old and new
         assert_eq!(&incr[..], &mmap[..]);
     }
 }
